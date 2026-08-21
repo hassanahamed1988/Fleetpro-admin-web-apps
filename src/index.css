@@ -1,0 +1,139 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer utilities {
+  /* =========================================================
+     GLOBAL CARD BOX SHADOW ELEVATION SYSTEM
+     - Main / Primary Cards: Clear, elegant floating box-shadow in Light & Dark mode
+     - Sub Cards: Proportionate micro elevation
+     - Selection menus, inputs, selects, and dropdowns: strictly NO box-shadow
+     ========================================================= */
+
+  /* Light Mode Main Cards - Clear, floating depth (crisp ambient drop shadow) */
+  .main-card,
+  .app-card,
+  .card-elevated,
+  .shadow-card,
+  .shadow-xs,
+  .shadow-sm,
+  .shadow-md {
+    box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.08), 0 2px 6px -1px rgba(0, 0, 0, 0.05), 0 0 1px 0 rgba(0, 0, 0, 0.1) !important;
+  }
+
+  /* Dark Mode Main Cards - High-contrast ambient shadow visible against dark background */
+  .dark .main-card,
+  .dark .app-card,
+  .dark .card-elevated,
+  .dark .shadow-card,
+  .dark .shadow-xs,
+  .dark .shadow-sm,
+  .dark .shadow-md {
+    box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08), 0 4px 20px 0 rgba(24, 24, 27, 0.65), inset 0 1px 0 0 rgba(255, 255, 255, 0.12) !important;
+  }
+
+  /* Sub Cards / Nested items inside Main Cards */
+  .sub-card,
+  .sub-card-elevated {
+    box-shadow: 0 2px 8px -1px rgba(0, 0, 0, 0.06), 0 1px 3px 0 rgba(0, 0, 0, 0.04) !important;
+  }
+
+  .dark .sub-card,
+  .dark .sub-card-elevated {
+    box-shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05), inset 0 1px 0 0 rgba(255, 255, 255, 0.07) !important;
+  }
+
+  /* =========================================================
+     GLOBAL ADAPTIVE GRID SYSTEM FOR FORMS AND INPUTS
+     - Mobile: 1 Column Responsive (100% available container width)
+     - Tablet: 2 Columns Responsive
+     - Desktop: 4 Columns Responsive (compact, reduces height)
+     - Zero hardcoded pixel widths, automatic sizing
+     ========================================================= */
+  .app-form-grid {
+    display: grid !important;
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+    gap: 1rem !important;
+    width: 100% !important;
+  }
+
+  @media (min-width: 480px) {
+    .app-form-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+  }
+
+  @media (min-width: 640px) {
+    .app-form-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    }
+  }
+
+  /* Global fluid dialogs and cards to prevent overflow and empty side gaps */
+  .app-fluid-modal {
+    width: 98vw !important;
+    max-width: 98% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+}
+
+/* Base Component & Structural Card Overrides for Global Elevation */
+div.bg-white.rounded-2xl,
+div.bg-white.rounded-xl,
+form.bg-white.rounded-2xl,
+form.bg-white.rounded-xl,
+section.bg-white.rounded-2xl,
+section.bg-white.rounded-xl,
+div[class*="bg-white"][class*="rounded-2xl"],
+div[class*="bg-white"][class*="rounded-xl"],
+form[class*="bg-white"][class*="rounded-2xl"],
+section[class*="bg-white"][class*="rounded-2xl"] {
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.08), 0 2px 6px -1px rgba(0, 0, 0, 0.05), 0 0 1px 0 rgba(0, 0, 0, 0.1);
+}
+
+.dark div.bg-zinc-900.rounded-2xl,
+.dark div.bg-zinc-900.rounded-xl,
+.dark form.bg-zinc-900.rounded-2xl,
+.dark form.bg-zinc-900.rounded-xl,
+.dark section.bg-zinc-900.rounded-2xl,
+.dark section.bg-zinc-900.rounded-xl,
+.dark div[class*="bg-zinc-900"][class*="rounded-2xl"],
+.dark div[class*="bg-zinc-900"][class*="rounded-xl"],
+.dark div[class*="dark:bg-zinc-900"][class*="rounded-2xl"],
+.dark div[class*="dark:bg-zinc-900"][class*="rounded-xl"] {
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08), 0 4px 20px 0 rgba(24, 24, 27, 0.65), inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+}
+
+/* Strict Exclusion: NO Box Shadow on Selection Menus, Inputs, Select Boxes, and Dropdowns */
+input,
+select,
+textarea,
+option,
+input:focus,
+select:focus,
+textarea:focus,
+.no-shadow,
+.no-shadow:focus,
+select.h-9,
+select.h-10,
+select.h-11,
+input.h-9,
+input.h-10,
+input.h-11,
+div.relative > select,
+div.relative > input,
+button.relative > select {
+  box-shadow: none !important;
+  -webkit-box-shadow: none !important;
+}
+
+/* Ensure FloatingInput and Search container boxes do not have box shadows */
+div[class*="FloatingInput"],
+div[class*="focus-within:border"],
+div.relative.w-full.h-\[48px\],
+div.relative.w-full.md\:flex-1.h-11 {
+  box-shadow: none !important;
+  -webkit-box-shadow: none !important;
+}
+

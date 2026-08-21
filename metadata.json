@@ -1,0 +1,8 @@
+{
+  "name": "Fleetpro Management",
+  "description": "A complete, modern, and professional Admin Control Panel for fleet management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
