@@ -5,7 +5,7 @@
 
 export type UserRole = 'Admin Owner' | 'Super Admin' | 'Admin' | 'Manager' | 'Operator' | 'Users';
 
-export type UserStatus = 'Active' | 'Inactive' | 'Pending';
+export type UserStatus = 'Active' | 'Inactive' | 'Pending' | 'Blocked';
 
 export interface UserDeviceRecord {
   id: string;

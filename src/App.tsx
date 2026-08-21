@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Car, Settings, ShieldAlert, 
   Activity, Bell, Moon, Sun, Monitor, Palette, 
   UserCircle, Menu, X, LogOut, ChevronRight, LogIn, Lock, Languages, Coins,
-  PanelLeftClose, PanelLeftOpen, Sliders
+  PanelLeftClose, PanelLeftOpen, Sliders, Smartphone
 } from 'lucide-react';
 
 import { User, Vehicle, ActivityLog, SystemNotification, AppSettings, RolePermission, ThemeColor, DisplayMode } from './types';
@@ -29,6 +29,7 @@ import { LoginView } from './components/LoginView';
 import { TwoFactorSetupModal } from './components/TwoFactorSetupModal';
 import { MustChangeCredentialsModal } from './components/MustChangeCredentialsModal';
 import { ControlPanelView } from './components/ControlPanelView';
+import { MobileTripsView } from './components/MobileApp';
 
 export default function App() {
   const { 
@@ -340,6 +341,7 @@ export default function App() {
     { id: 'Profile', key: 'My Profile', icon: <UserCircle className="w-5 h-5" /> },
     { id: 'Dashboard', key: 'nav.dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
     { id: 'Control Panel', key: 'Control Panel', icon: <Sliders className="w-5 h-5" /> },
+    { id: 'Mobile Trips', key: 'Mobile App Controls', icon: <Smartphone className="w-5 h-5" /> },
     { id: 'User Management', key: 'nav.userManagement', icon: <Users className="w-5 h-5" /> },
     { id: 'Vehicles', key: 'nav.vehicles', icon: <Car className="w-5 h-5" /> },
     { id: 'Application Settings', key: 'nav.applicationSettings', icon: <Settings className="w-5 h-5" /> },
@@ -888,6 +890,52 @@ export default function App() {
             )}
             {currentView === 'Control Panel' && (
               <ControlPanelView
+                themeColor={themeColor}
+                triggerToast={triggerToast}
+                triggerConfirm={triggerConfirm}
+              />
+            )}
+            {currentView === 'Mobile Trips' && (
+              <MobileTripsView
+                users={users}
+                onAddUser={async (nu) => {
+                  setUsers((prev) => [nu, ...prev]);
+                  logAdminAction('Create Mobile User Record', 'User Management', `Created new mobile user record for ${nu.name} (${nu.id}).`);
+                  try {
+                    await fetch('/api/auth/users', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(nu),
+                    });
+                  } catch (err) {
+                    console.error('Failed to sync new mobile user to backend', err);
+                  }
+                }}
+                onUpdateUser={async (uu) => {
+                  setUsers((prev) => prev.map(u => u.id === uu.id ? uu : u));
+                  logAdminAction('Update Mobile User Record', 'User Management', `Updated mobile user record for ${uu.name} (${uu.id}).`);
+                  try {
+                    await fetch(`/api/auth/users/${uu.id}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(uu),
+                    });
+                  } catch (err) {
+                    console.error('Failed to sync updated mobile user to backend', err);
+                  }
+                }}
+                onDeleteUser={async (id) => {
+                  const targetUser = users.find(u => u.id === id);
+                  setUsers((prev) => prev.filter(u => u.id !== id));
+                  if (targetUser) {
+                    logAdminAction('Delete Mobile User Record', 'User Management', `Deleted mobile user ${targetUser.name} (${targetUser.id}).`);
+                  }
+                  try {
+                    await fetch(`/api/auth/users/${id}`, { method: 'DELETE' });
+                  } catch (err) {
+                    console.error('Failed to sync mobile user deletion to backend', err);
+                  }
+                }}
                 themeColor={themeColor}
                 triggerToast={triggerToast}
                 triggerConfirm={triggerConfirm}

@@ -1,12 +1,12 @@
-import { pgTable, text, boolean, integer, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, text, boolean, integer, jsonb, real } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   email: text('email').notNull().unique(),
   username: text('username'),
-  role: text('role').notNull(),
-  status: text('status').notNull(),
+  role: text('role').notNull(), // 'USER' | 'ADMIN' | 'Admin Owner' | 'Users' etc.
+  status: text('status').notNull(), // 'Active' | 'Inactive' | 'Pending' | 'Blocked'
   avatarUrl: text('avatar_url'),
   phone: text('phone').notNull(),
   department: text('department').notNull(),
@@ -20,7 +20,27 @@ export const users = pgTable('users', {
   trustedDeviceTokens: jsonb('trusted_device_tokens').default([]),
   devices: jsonb('devices').default([]),
   loginHistory: jsonb('login_history').default([]),
-  permissions: jsonb('permissions').notNull()
+  permissions: jsonb('permissions').notNull(),
+
+  // Mobile App UserProfile Extensions
+  firstName: text('first_name'),
+  lastName: text('last_name'),
+  loginEmail: text('login_email'),
+  mobileNumber: text('mobile_number'),
+  idType: text('id_type'),
+  idNumber: text('id_number'),
+  idIssueCountry: text('id_issue_country'),
+  idIssueDate: text('id_issue_date'),
+  idExpiryDate: text('id_expiry_date'),
+  country: text('country'),
+  state: text('state'),
+  city: text('city'),
+  policeStation: text('police_station'),
+  postOffice: text('post_office'),
+  postalCode: text('postal_code'),
+  addressLine1: text('address_line_1'),
+  buildingNumber: text('building_number'),
+  zoneNumber: text('zone_number')
 });
 
 export const vehicles = pgTable('vehicles', {
@@ -73,4 +93,17 @@ export const appSettings = pgTable('app_settings', {
 export const rolePermissions = pgTable('role_permissions', {
   role: text('role').primaryKey(),
   modules: jsonb('modules').notNull()
+});
+
+export const tripLogs = pgTable('trip_logs', {
+  id: text('id').primaryKey(),
+  driverId: text('driver_id').notNull(),
+  vehicleNumber: text('vehicle_number').notNull(),
+  startLocation: jsonb('start_location').notNull(), // { latitude, longitude, address }
+  endLocation: jsonb('end_location'), // { latitude, longitude, address }
+  startTime: text('start_time').notNull(),
+  endTime: text('end_time'),
+  currentSpeed: real('current_speed').notNull(),
+  totalDistance: real('total_distance').notNull(),
+  status: text('status').notNull() // 'Started' | 'Completed' | 'Cancelled'
 });

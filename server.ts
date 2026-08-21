@@ -8,7 +8,8 @@ import {
 } from './src/lib/authSecurity';
 import { getFirebaseAuth } from './src/lib/firebaseAdmin';
 import { db } from './src/db/index.ts';
-import { users, vehicles, activityLogs, notifications, appSettings, rolePermissions } from './src/db/schema.ts';
+import { users, vehicles, activityLogs, notifications, appSettings, rolePermissions, tripLogs } from './src/db/schema.ts';
+import { initialAppSettings, initialRolePermissions } from './src/data.ts';
 import { eq, desc } from 'drizzle-orm';
 
 const app = express();
@@ -51,7 +52,6 @@ async function seedDatabase() {
     const existingRoles = await db.select().from(rolePermissions).limit(1);
     if (existingRoles.length === 0) {
       console.log('Seeding default role permissions...');
-      const { initialRolePermissions } = require('./src/data');
       for (const rp of initialRolePermissions) {
         await db.insert(rolePermissions).values({
           role: rp.role,
@@ -64,7 +64,6 @@ async function seedDatabase() {
     const existingSettings = await db.select().from(appSettings).limit(1);
     if (existingSettings.length === 0) {
       console.log('Seeding default app settings...');
-      const { initialAppSettings } = require('./src/data');
       await db.insert(appSettings).values({
         id: 'default',
         ...initialAppSettings
@@ -737,6 +736,247 @@ app.post('/api/auth/logs', async (req, res) => {
     res.json({ success: true, log: newLog });
   } catch (err) {
     res.status(500).json({ error: 'Failed to create log' });
+  }
+});
+
+// ==================== MOBILE APP API ENDPOINTS ====================
+
+function mapToUserProfile(user: any) {
+  return {
+    id: user.id,
+    firstName: user.firstName || user.name.split(' ')[0] || '',
+    lastName: user.lastName || user.name.split(' ').slice(1).join(' ') || '',
+    name: user.name,
+    userId: user.username || user.email || '',
+    email: user.email,
+    loginEmail: user.loginEmail || user.email,
+    mobileNumber: user.mobileNumber || user.phone || '',
+    role: (user.role === 'Admin Owner' || user.role === 'ADMIN') ? 'ADMIN' : 'USER',
+    status: user.status || 'Active',
+    idType: user.idType || 'NID',
+    idNumber: user.idNumber || '',
+    idIssueCountry: user.idIssueCountry || '',
+    idIssueDate: user.idIssueDate || '',
+    idExpiryDate: user.idExpiryDate || '',
+    country: user.country || '',
+    state: user.state || '',
+    city: user.city || '',
+    policeStation: user.policeStation || '',
+    postOffice: user.postOffice || '',
+    postalCode: user.postalCode || '',
+    addressLine1: user.addressLine1 || '',
+    buildingNumber: user.buildingNumber || '',
+    zoneNumber: user.zoneNumber || ''
+  };
+}
+
+// 1. Mobile Driver Authentication (Login)
+app.post('/api/mobile/login', async (req, res) => {
+  try {
+    const { loginEmail, password } = req.body;
+    if (!loginEmail || !password) {
+      return res.status(400).json({ error: 'loginEmail and password are required' });
+    }
+
+    const user: any = await getUserByEmailOrUsername(loginEmail);
+    if (!user) {
+      return res.status(401).json({ error: 'User profile not found.' });
+    }
+
+    const isValid = verifyPassword(password, user.passwordHash || '');
+    if (!isValid) {
+      return res.status(401).json({ error: 'Incorrect credentials.' });
+    }
+
+    if (user.status === 'Blocked' || user.status === 'Inactive') {
+      return res.status(403).json({ error: 'Your mobile driver account is suspended. Contact Administrator.' });
+    }
+
+    // Return exact UserProfile format expected by mobile app
+    const profile = mapToUserProfile(user);
+    await addAuditLog(user.id, user.name, user.email, 'Mobile Driver Login', 'Security', 'Driver logged in from mobile device.');
+    
+    res.json({ success: true, profile });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// 2. Mobile Profile Fetching
+app.get('/api/mobile/profile/:id', async (req, res) => {
+  try {
+    const [user] = await db.select().from(users).where(eq(users.id, req.params.id));
+    if (!user) {
+      return res.status(404).json({ error: 'Driver profile not found.' });
+    }
+    res.json(mapToUserProfile(user));
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 3. Mobile Profile Updates
+app.put('/api/mobile/profile/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const body = req.body;
+    
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    if (!user) {
+      return res.status(404).json({ error: 'Driver profile not found' });
+    }
+
+    const updatableFields = [
+      'firstName', 'lastName', 'mobileNumber', 'idType', 'idNumber',
+      'idIssueCountry', 'idIssueDate', 'idExpiryDate', 'country', 'state',
+      'city', 'policeStation', 'postOffice', 'postalCode', 'addressLine1',
+      'buildingNumber', 'zoneNumber'
+    ];
+
+    const updates: any = {};
+    for (const field of updatableFields) {
+      if (body[field] !== undefined) {
+        updates[field] = body[field];
+      }
+    }
+
+    if (body.name) updates.name = body.name;
+    if (body.mobileNumber) updates.phone = body.mobileNumber;
+
+    await db.update(users).set(updates).where(eq(users.id, id));
+    
+    await addAuditLog(id, user.name, user.email, 'Mobile Profile Updated', 'User', 'Driver updated their registration credentials.');
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 4. Mobile Driver Trip - START
+app.post('/api/mobile/trips/start', async (req, res) => {
+  try {
+    const { id, driverId, vehicleNumber, startLocation, startTime, currentSpeed, totalDistance } = req.body;
+    if (!id || !driverId || !vehicleNumber || !startLocation || !startTime) {
+      return res.status(400).json({ error: 'id, driverId, vehicleNumber, startLocation, and startTime are required.' });
+    }
+
+    const newTrip = {
+      id,
+      driverId,
+      vehicleNumber,
+      startLocation,
+      startTime,
+      currentSpeed: Number(currentSpeed || 0),
+      totalDistance: Number(totalDistance || 0),
+      status: 'Started' as const
+    };
+
+    await db.insert(tripLogs).values(newTrip);
+
+    // Write alert log
+    const [driver] = await db.select().from(users).where(eq(users.id, driverId));
+    await addAuditLog(driverId, driver?.name || 'Driver', driver?.email || 'driver@fleetpro.com', 'Trip Started', 'Vehicle', `Started trip on vehicle ${vehicleNumber}`);
+
+    res.json({ success: true, trip: newTrip });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to start trip log' });
+  }
+});
+
+// 5. Mobile Driver Trip - UPDATE (Telemetry & Location stream)
+app.post('/api/mobile/trips/update', async (req, res) => {
+  try {
+    const { id, currentSpeed, totalDistance, location } = req.body;
+    if (!id) {
+      return res.status(400).json({ error: 'id is required to update trip log.' });
+    }
+
+    const [activeTrip] = await db.select().from(tripLogs).where(eq(tripLogs.id, id));
+    if (!activeTrip) {
+      return res.status(404).json({ error: 'Active trip log not found.' });
+    }
+
+    const updates: any = {
+      currentSpeed: Number(currentSpeed || 0),
+      totalDistance: Number(totalDistance || 0)
+    };
+    if (location) {
+      updates.startLocation = location; // Update current tracking location in startLocation property
+    }
+
+    await db.update(tripLogs).set(updates).where(eq(tripLogs.id, id));
+
+    // Check for speed limit violations (Speed Alert Alarm)
+    const speedLimit = 80; // default speed alert threshold
+    if (Number(currentSpeed || 0) > speedLimit) {
+      const [driver] = await db.select().from(users).where(eq(users.id, activeTrip.driverId));
+      
+      // Post warning notification to app notifications table
+      const warningNotification = {
+        id: `NOTIF-${Date.now()}`,
+        title: 'Speed Alarm Triggered',
+        message: `Driver ${driver?.name || activeTrip.driverId} exceeded speed limits on vehicle ${activeTrip.vehicleNumber}: ${currentSpeed} km/h!`,
+        timestamp: new Date().toISOString(),
+        type: 'error',
+        category: 'Vehicle',
+        read: false
+      };
+      await db.insert(notifications).values(warningNotification);
+      await addAuditLog(activeTrip.driverId, driver?.name || 'Driver', driver?.email || '', 'Speed Limit Alarm Exceeded', 'Security', `Vehicle ${activeTrip.vehicleNumber} moving at dangerous speed of ${currentSpeed} km/h`, 'Failed');
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to update trip telemetry.' });
+  }
+});
+
+// 6. Mobile Driver Trip - END
+app.post('/api/mobile/trips/end', async (req, res) => {
+  try {
+    const { id, endLocation, endTime, totalDistance, currentSpeed, status } = req.body;
+    if (!id || !endLocation || !endTime) {
+      return res.status(400).json({ error: 'id, endLocation, and endTime are required.' });
+    }
+
+    const [activeTrip] = await db.select().from(tripLogs).where(eq(tripLogs.id, id));
+    if (!activeTrip) {
+      return res.status(404).json({ error: 'Active trip not found.' });
+    }
+
+    await db.update(tripLogs)
+      .set({
+        endLocation,
+        endTime,
+        totalDistance: Number(totalDistance || activeTrip.totalDistance),
+        currentSpeed: Number(currentSpeed || 0),
+        status: status || 'Completed'
+      })
+      .where(eq(tripLogs.id, id));
+
+    const [driver] = await db.select().from(users).where(eq(users.id, activeTrip.driverId));
+    await addAuditLog(activeTrip.driverId, driver?.name || 'Driver', driver?.email || '', 'Trip Completed', 'Vehicle', `Finished trip logs on vehicle ${activeTrip.vehicleNumber}. Travelled ${totalDistance} km.`);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to complete trip log.' });
+  }
+});
+
+// 7. Get all mobile trips
+app.get('/api/mobile/trips', async (req, res) => {
+  try {
+    const list = await db.select().from(tripLogs).orderBy(desc(tripLogs.startTime));
+    res.json(list);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to retrieve trip logs list.' });
   }
 });
 
