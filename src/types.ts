@@ -60,6 +60,10 @@ export interface User {
     settings: boolean;
     auditLogs: boolean;
   };
+  mobileModulePermissions?: Record<string, boolean>;
+  adminOwnerId?: string;
+  createdBy?: string;
+  accountType?: 'MOBILE_APP' | 'ADMIN_PANEL';
   [key: string]: any;
 }
 

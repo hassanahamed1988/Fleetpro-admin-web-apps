@@ -371,7 +371,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       'lastLogin', 'permissions', 'avatarUrl', 'username', 'mustChangeCredentials',
       'is2faEnabled', 'is2faSetupRequired', 'totpSecretEncrypted', 'passwordHash',
       'password', 'trustedDeviceTokens', 'features', 'allowedFeatures', 'dbSource',
-      'devices', 'loginHistory', '__v', 'accountType',
+      'devices', 'loginHistory', '__v', 'accountType', 'mobileModulePermissions',
       'firstName', 'lastName', 'dateOfBirth', 'nationality', 'gender', 'religion', 'profession', 'mobileCode',
       'documentId', 'documentIssueDate', 'documentExpiryDate',
       'country', 'region', 'city', 'policeStation', 'postOfficeName', 'postalCode', 'buildingNumber', 'zoneNumber', 'stateNumber', 'areaName'
@@ -619,6 +619,31 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 exit={{ opacity: 0, y: -6 }}
                 className="space-y-6"
               >
+                {/* Admin Owner ID & Ownership Mapping Card */}
+                <div className="p-4 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-800/50 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-lg bg-indigo-600 text-white shadow-xs">
+                      <Shield className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                        Mapped Admin Owner ID
+                      </div>
+                      <div className="text-sm font-mono font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                        <span>{user.adminOwnerId || (user.role === 'Admin Owner' ? 'AO-000' : 'AO-000')}</span>
+                        <span className="text-xs font-sans font-normal text-zinc-500 dark:text-zinc-400">
+                          (Created By: <strong className="text-zinc-700 dark:text-zinc-200">{user.createdBy || 'Admin Owner'}</strong>)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 rounded-full text-[11px] font-extrabold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/50">
+                      Immutable Ownership Record
+                    </span>
+                  </div>
+                </div>
+
                 {/* CATEGORY 1: PERSONAL INFORMATION */}
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 pb-2 border-b border-zinc-100 dark:border-zinc-800">

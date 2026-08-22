@@ -15,6 +15,9 @@ export const initialUsers: User[] = [
     status: 'Active',
     phone: '+880 1700-000000',
     department: 'Executive Owner',
+    adminOwnerId: 'AO-000',
+    createdBy: 'SYSTEM',
+    accountType: 'ADMIN_PANEL',
     joinDate: new Date().toISOString().split('T')[0],
     lastLogin: 'Today',
     permissions: { dashboard: true, users: true, vehicles: false, settings: true, auditLogs: true }

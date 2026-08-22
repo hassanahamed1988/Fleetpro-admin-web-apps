@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Car, Settings, ShieldAlert, 
   Activity, Bell, Moon, Sun, Monitor, Palette, 
   UserCircle, Menu, X, LogOut, ChevronRight, LogIn, Lock, Languages, Coins,
-  PanelLeftClose, PanelLeftOpen, Sliders, Smartphone
+  PanelLeftClose, PanelLeftOpen, Sliders, Smartphone, Building2
 } from 'lucide-react';
 
 import { User, Vehicle, ActivityLog, SystemNotification, AppSettings, RolePermission, ThemeColor, DisplayMode } from './types';
@@ -30,6 +30,7 @@ import { TwoFactorSetupModal } from './components/TwoFactorSetupModal';
 import { MustChangeCredentialsModal } from './components/MustChangeCredentialsModal';
 import { ControlPanelView } from './components/ControlPanelView';
 import { MobileTripsView } from './components/MobileApp';
+import { CompanyManagementView } from './components/CompanyManagementView';
 
 export default function App() {
   const { 
@@ -246,6 +247,67 @@ export default function App() {
     }
   }, [authenticatedUser.role, currentView]);
 
+  // Global fetch interceptor to append multi-tenant headers transparently
+  useEffect(() => {
+    const originalFetch = window.fetch;
+    const newFetch = function (this: any, input: RequestInfo | URL, init?: RequestInit) {
+      if (typeof input === 'string' && input.startsWith('/api/')) {
+        init = init || {};
+        const headers = new Headers(init.headers || {});
+        if (authenticatedUser) {
+          headers.set('x-user-role', authenticatedUser.role || '');
+          headers.set('x-user-company-id', authenticatedUser.companyId || '');
+          headers.set('x-user-id', authenticatedUser.id || '');
+        }
+        init.headers = headers;
+      }
+      return originalFetch.call(this, input, init);
+    };
+
+    try {
+      Object.defineProperty(window, 'fetch', {
+        value: newFetch,
+        configurable: true,
+        writable: true,
+        enumerable: true
+      });
+    } catch (e) {
+      console.warn("Failed to redefine window.fetch, falling back to prototype override", e);
+      try {
+        Object.defineProperty(Object.getPrototypeOf(window), 'fetch', {
+          value: newFetch,
+          configurable: true,
+          writable: true,
+          enumerable: true
+        });
+      } catch (err) {
+        console.error("Failed to intercept fetch:", err);
+      }
+    }
+
+    return () => {
+      try {
+        Object.defineProperty(window, 'fetch', {
+          value: originalFetch,
+          configurable: true,
+          writable: true,
+          enumerable: true
+        });
+      } catch (e) {
+        try {
+          Object.defineProperty(Object.getPrototypeOf(window), 'fetch', {
+            value: originalFetch,
+            configurable: true,
+            writable: true,
+            enumerable: true
+          });
+        } catch (err) {
+          console.error("Failed to restore fetch:", err);
+        }
+      }
+    };
+  }, [authenticatedUser]);
+
   // Check if active mode is dark
   const isDarkMode = displayMode === 'dark' || (displayMode === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
@@ -340,6 +402,7 @@ export default function App() {
   const navItems = [
     { id: 'Profile', key: 'My Profile', icon: <UserCircle className="w-5 h-5" /> },
     { id: 'Dashboard', key: 'nav.dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
+    { id: 'Company Management', key: 'Company Management', icon: <Building2 className="w-5 h-5" /> },
     { id: 'Control Panel', key: 'Control Panel', icon: <Sliders className="w-5 h-5" /> },
     { id: 'Mobile Trips', key: 'Mobile App Controls', icon: <Smartphone className="w-5 h-5" /> },
     { id: 'User Management', key: 'nav.userManagement', icon: <Users className="w-5 h-5" /> },
@@ -351,6 +414,9 @@ export default function App() {
   ].filter((item) => {
     const isUserAdmin = authenticatedUser.role === 'Admin Owner' || authenticatedUser.role === 'Super Admin' || authenticatedUser.role === 'Admin';
     if (item.id === 'Control Panel' && !isUserAdmin) {
+      return false;
+    }
+    if (item.id === 'Company Management' && authenticatedUser.role !== 'Admin Owner') {
       return false;
     }
     if (authenticatedUser.role === 'Admin Owner' && item.id === 'Vehicles') {
@@ -747,11 +813,18 @@ export default function App() {
                   setUsers((prev) => [nu, ...prev]);
                   logAdminAction('Create User Record', 'User Management', `Created new user record for ${nu.name} (${nu.id}).`);
                   try {
-                    await fetch('/api/auth/users', {
+                    const res = await fetch('/api/auth/users', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(nu),
                     });
+                    const data = await res.json();
+                    if (!res.ok) {
+                      triggerToast('Registration Failed', data.error || 'Failed to create user', 'error');
+                      setUsers((prev) => prev.filter(u => u.id !== nu.id));
+                    } else if (data.user) {
+                      setUsers((prev) => prev.map(u => u.id === nu.id ? data.user : u));
+                    }
                   } catch (err) {
                     console.error('Failed to sync new user to backend', err);
                   }
@@ -785,6 +858,13 @@ export default function App() {
                 triggerToast={triggerToast}
                 triggerConfirm={triggerConfirm}
                 isAdmin={authenticatedUser.role === 'Admin Owner' || authenticatedUser.role === 'Super Admin' || authenticatedUser.role === 'Admin'}
+              />
+            )}
+            {currentView === 'Company Management' && (
+              <CompanyManagementView
+                themeColor={themeColor}
+                triggerToast={triggerToast}
+                triggerConfirm={triggerConfirm}
               />
             )}
             {currentView === 'Vehicles' && (
@@ -898,15 +978,23 @@ export default function App() {
             {currentView === 'Mobile Trips' && (
               <MobileTripsView
                 users={users}
+                currentUser={authenticatedUser}
                 onAddUser={async (nu) => {
                   setUsers((prev) => [nu, ...prev]);
                   logAdminAction('Create Mobile User Record', 'User Management', `Created new mobile user record for ${nu.name} (${nu.id}).`);
                   try {
-                    await fetch('/api/auth/users', {
+                    const res = await fetch('/api/auth/users', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(nu),
                     });
+                    const data = await res.json();
+                    if (!res.ok) {
+                      triggerToast('Registration Failed', data.error || 'Failed to create mobile user', 'error');
+                      setUsers((prev) => prev.filter(u => u.id !== nu.id));
+                    } else if (data.user) {
+                      setUsers((prev) => prev.map(u => u.id === nu.id ? data.user : u));
+                    }
                   } catch (err) {
                     console.error('Failed to sync new mobile user to backend', err);
                   }

@@ -40,7 +40,73 @@ export const users = pgTable('users', {
   postalCode: text('postal_code'),
   addressLine1: text('address_line_1'),
   buildingNumber: text('building_number'),
-  zoneNumber: text('zone_number')
+  zoneNumber: text('zone_number'),
+  mobileModulePermissions: jsonb('mobile_module_permissions').default({}),
+  adminOwnerId: text('admin_owner_id'),
+  createdBy: text('created_by'),
+  accountType: text('account_type').default('MOBILE_APP'),
+
+  // Company Owner & Tenant Mapping Extensions
+  companyId: text('company_id'),
+  alternativeMobileNumber: text('alternative_mobile_number'),
+  dateOfBirth: text('date_of_birth'),
+  nationality: text('nationality'),
+  nationalId: text('national_id'),
+  address: text('address')
+});
+
+export const companies = pgTable('companies', {
+  id: text('id').primaryKey(),
+  companyName: text('company_name').notNull(),
+  companyRegistrationNumber: text('company_registration_number'),
+  companyType: text('company_type'),
+  businessCategory: text('business_category'),
+  companyEmail: text('company_email'),
+  companyPhone: text('company_phone'),
+  alternativePhone: text('alternative_phone'),
+  companyWebsite: text('company_website'),
+  taxVatRegistrationNumber: text('tax_vat_registration_number'),
+  tradeLicenseNumber: text('trade_license_number'),
+  companyAddress: text('company_address'),
+  country: text('country'),
+  state: text('state'),
+  city: text('city'),
+  postalCode: text('postal_code'),
+  companyDescription: text('company_description'),
+  companyLogo: text('company_logo'),
+  createdAt: text('created_at').notNull()
+});
+
+export const subscriptions = pgTable('subscriptions', {
+  id: text('id').primaryKey(),
+  companyId: text('company_id').notNull(),
+  subscriptionPackage: text('subscription_package'),
+  billingType: text('billing_type'),
+  subscriptionPrice: text('subscription_price'),
+  subscriptionDuration: text('subscription_duration'),
+  startDate: text('start_date'),
+  expiryDate: text('expiry_date'),
+  paymentStatus: text('payment_status'),
+  subscriptionStatus: text('subscription_status'),
+  maxUserLimit: integer('max_user_limit'),
+  maxVehicleLimit: integer('max_vehicle_limit'),
+  notes: text('notes'),
+  createdAt: text('created_at').notNull()
+});
+
+export const payments = pgTable('payments', {
+  id: text('id').primaryKey(),
+  companyId: text('company_id').notNull(),
+  subscriptionId: text('subscription_id').notNull(),
+  totalAmount: text('total_amount'),
+  paymentMethod: text('payment_method'), // Cash, Cheque, Bank Transfer
+  cashInfo: text('cash_info'),
+  chequeNumber: text('cheque_number'),
+  bankName: text('bank_name'),
+  bankAccountNumber: text('bank_account_number'),
+  accountHolderName: text('account_holder_name'),
+  transactionId: text('transaction_id'),
+  createdAt: text('created_at').notNull()
 });
 
 export const vehicles = pgTable('vehicles', {

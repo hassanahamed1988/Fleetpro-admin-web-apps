@@ -25,7 +25,6 @@ interface UserManagementViewProps {
   themeColor: 'blue' | 'emerald' | 'red' | 'amber' | 'purple';
   triggerToast: (title: string, message: string, type: 'success' | 'warning' | 'error' | 'info') => void;
   triggerConfirm: (title: string, message: string, onConfirm: () => void) => void;
-  isMobileOnly?: boolean;
 }
 
 export const getCountryFlag = (value: string): string => {
@@ -67,7 +66,6 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   themeColor,
   triggerToast,
   triggerConfirm,
-  isMobileOnly = false,
 }) => {
   const { language, t, formatNumber, formatDate, toDigits } = useLanguage();
   // Search & Filter State
@@ -310,16 +308,11 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
         uName.includes(sLower) ||
         uEmail.includes(sLower) ||
         uPhone.includes(search || '');
-      
-      if (isMobileOnly) {
-        if (u?.role !== 'Users' && u?.role !== 'USER') {
-          return false;
-        }
-      }
 
       const matchesRole = roleFilter === 'All' || u?.role === roleFilter;
       const matchesStatus = statusFilter === 'All' || u?.status === statusFilter;
-      return matchesSearch && matchesRole && matchesStatus && u?.role !== 'Admin Owner';
+      const isMobileAppUser = u?.accountType === 'MOBILE_APP' || u?.role === 'Users' || u?.role === 'USER';
+      return matchesSearch && matchesRole && matchesStatus && u?.role !== 'Admin Owner' && !isMobileAppUser;
     })
     .sort((a, b) => {
       const aVal = String(a[sortField] ?? '');
@@ -430,9 +423,9 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     setFormLastName('');
     setFormEmail('');
     setFormPhone('');
-    setFormRole(isMobileOnly ? 'Users' : 'Operator');
+    setFormRole('Operator');
     setFormStatus('Pending');
-    setFormDepartment(isMobileOnly ? 'Mobile App Users' : 'Operations');
+    setFormDepartment('Operations');
     setFormPermissions({
       dashboard: true,
       users: false,
@@ -683,12 +676,10 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
           <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">
-            {isMobileOnly ? t('Mobile App Controls — User Management') : t('User Directory')}
+            {t('User Directory')}
           </h2>
           <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">
-            {isMobileOnly 
-              ? t('Manage mobile application users, registration details, app access statuses, devices, and sessions.') 
-              : t('Manage administrative credentials, system roles, and account access permissions.')}
+            {t('Manage administrative credentials, system roles, and account access permissions.')}
           </p>
         </div>
 
@@ -697,7 +688,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
           className={`h-[40px] px-4 rounded-[8px] text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-sm ${themeBg[themeColor]}`}
         >
           <Plus className="w-4 h-4" />
-          {isMobileOnly ? t('Add New Mobile User') : t('Add New User')}
+          {t('Add New User')}
         </button>
       </div>
 
@@ -710,34 +701,32 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
             setSearch(val);
             setCurrentPage(1);
           }}
-          placeholder={isMobileOnly ? t('Search mobile users by name, email, phone...') : t('Search by name, email, phone...')}
+          placeholder={t('Search by name, email, phone...')}
           themeColor={themeColor}
         />
 
         {/* Filters Group */}
         <div className="flex flex-wrap gap-3.5 w-full md:w-auto">
           {/* Role Filter */}
-          {!isMobileOnly && (
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-zinc-400 font-medium">{t('Role:')}</span>
-              <select
-                value={roleFilter}
-                onChange={(e) => {
-                  setRoleFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="h-10 text-xs px-3 rounded-[8px] border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-400"
-              >
-                <option value="All">{t('All Roles')}</option>
-                <option value="Admin Owner">{t('Admin Owner')}</option>
-                <option value="Super Admin">{t('Super Admin')}</option>
-                <option value="Admin">{t('Admin')}</option>
-                <option value="Manager">{t('Manager')}</option>
-                <option value="Operator">{t('Operator')}</option>
-                <option value="Users">{t('Users')}</option>
-              </select>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-zinc-400 font-medium">{t('Role:')}</span>
+            <select
+              value={roleFilter}
+              onChange={(e) => {
+                setRoleFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="h-10 text-xs px-3 rounded-[8px] border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-400"
+            >
+              <option value="All">{t('All Roles')}</option>
+              <option value="Admin Owner">{t('Admin Owner')}</option>
+              <option value="Super Admin">{t('Super Admin')}</option>
+              <option value="Admin">{t('Admin')}</option>
+              <option value="Manager">{t('Manager')}</option>
+              <option value="Operator">{t('Operator')}</option>
+              <option value="Users">{t('Users')}</option>
+            </select>
+          </div>
 
           {/* Status Filter */}
           <div className="flex items-center gap-2">
@@ -754,7 +743,6 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               <option value="Active">{t('Active')}</option>
               <option value="Inactive">{t('Inactive')}</option>
               <option value="Pending">{t('Pending')}</option>
-              {isMobileOnly && <option value="Blocked">{t('Blocked')}</option>}
             </select>
           </div>
         </div>
@@ -1506,7 +1494,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                       value={formRole}
                       onChange={(val) => setFormRole(val as UserRole)}
                       category="Role"
-                      fallbackOptions={isMobileOnly ? ['Users'] : ['Admin Owner', 'Super Admin', 'Admin', 'Manager', 'Operator', 'Users']}
+                      fallbackOptions={['Admin Owner', 'Super Admin', 'Admin', 'Manager', 'Accountant', 'Accounting Manager', 'Assistant', 'Officer', 'Supervisor', 'Operator', 'Users']}
                       icon={<Shield className="w-4 h-4 text-zinc-400 dark:text-zinc-500" />}
                     />
 
@@ -1515,37 +1503,35 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                       value={formStatus}
                       onChange={(val) => setFormStatus(val as UserStatus)}
                       category="Status"
-                      fallbackOptions={isMobileOnly ? ['Active', 'Inactive', 'Pending', 'Blocked'] : ['Active', 'Inactive', 'Pending']}
+                      fallbackOptions={['Active', 'Inactive', 'Pending']}
                       icon={<Activity className="w-4 h-4 text-zinc-400 dark:text-zinc-500" />}
                     />
                   </div>
 
                   {/* Module Permissions Matrix checkboxes */}
-                  {!isMobileOnly && (
-                    <div className="pt-2">
-                      <label className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-2.5 block">
-                        {t('Module Permissions Access')}
-                      </label>
-                      <div className="app-form-grid">
-                        {Object.keys(formPermissions).map((perm) => (
-                          <label key={perm} className="flex items-center gap-2.5 text-xs text-zinc-600 dark:text-zinc-300 font-medium cursor-pointer p-2.5 rounded-xl border border-zinc-200/50 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/20 hover:bg-zinc-100/50 dark:hover:bg-zinc-800/40 transition-all">
-                            <input
-                              type="checkbox"
-                              checked={formPermissions[perm as keyof typeof formPermissions]}
-                              onChange={(e) => setFormPermissions({
-                                ...formPermissions,
-                                [perm]: e.target.checked
-                              })}
-                              className={`w-4.5 h-4.5 rounded border-zinc-300 text-white cursor-pointer focus:ring-0 ${themeCheckBg[themeColor]}`}
-                            />
-                            <span className="capitalize font-semibold truncate">
-                              {perm === 'dashboard' ? t('Dashboard') : perm === 'users' ? t('Users Directory') : perm === 'vehicles' ? t('Vehicles') : perm === 'settings' ? t('App Control') : perm === 'auditLogs' ? t('Audit Logs') : perm.replace(/([A-Z])/g, ' $1')}
-                            </span>
-                          </label>
-                        ))}
-                      </div>
+                  <div className="pt-2">
+                    <label className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-2.5 block">
+                      {t('Module Permissions Access')}
+                    </label>
+                    <div className="app-form-grid">
+                      {Object.keys(formPermissions).map((perm) => (
+                        <label key={perm} className="flex items-center gap-2.5 text-xs text-zinc-600 dark:text-zinc-300 font-medium cursor-pointer p-2.5 rounded-xl border border-zinc-200/50 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/20 hover:bg-zinc-100/50 dark:hover:bg-zinc-800/40 transition-all">
+                          <input
+                            type="checkbox"
+                            checked={formPermissions[perm as keyof typeof formPermissions]}
+                            onChange={(e) => setFormPermissions({
+                              ...formPermissions,
+                              [perm]: e.target.checked
+                            })}
+                            className={`w-4.5 h-4.5 rounded border-zinc-300 text-white cursor-pointer focus:ring-0 ${themeCheckBg[themeColor]}`}
+                          />
+                          <span className="capitalize font-semibold truncate">
+                            {perm === 'dashboard' ? t('Dashboard') : perm === 'users' ? t('Users Directory') : perm === 'vehicles' ? t('Vehicles') : perm === 'settings' ? t('App Control') : perm === 'auditLogs' ? t('Audit Logs') : perm.replace(/([A-Z])/g, ' $1')}
+                          </span>
+                        </label>
+                      ))}
                     </div>
-                  )}
+                  </div>
                 </div>
 
                 {/* CATEGORY 5: SECURITY & CREDENTIALS */}
@@ -1617,8 +1603,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 {/* Custom Profile Fields Removed */}
 
                 {/* Mobile App Feature Access Control Checklist - 3 Columns on Desktop */}
-                {!isMobileOnly && (
-                  <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 space-y-3">
+                <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 space-y-3">
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-50 uppercase tracking-wider">
                         {t('Mobile App Feature Access Control')}
@@ -1677,7 +1662,6 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                       );
                     })()}
                   </div>
-                )}
 
                 <div className="pt-5 border-t border-zinc-100 dark:border-zinc-800 flex justify-end gap-3 shrink-0">
                   <button
