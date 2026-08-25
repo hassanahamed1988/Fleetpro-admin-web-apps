@@ -169,51 +169,70 @@ export default function App() {
     return initialUsers.find(u => u.role === 'Admin Owner') || initialUsers[0];
   });
 
+  // Synchronize live data from Firestore database on mount and state changes
   useEffect(() => {
-    if (!isLoggedIn) return;
-    
-    fetch('/api/auth/users')
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data) && data.length > 0) setUsers(data);
-      })
-      .catch(console.error);
+    let isMounted = true;
 
-    fetch('/api/vehicles')
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) setVehicles(data);
-      })
-      .catch(console.error);
+    const fetchAllData = async () => {
+      try {
+        const userHeaders: Record<string, string> = {};
+        if (authenticatedUser?.role) {
+          userHeaders['x-user-role'] = authenticatedUser.role;
+        }
+        if (authenticatedUser?.companyId) {
+          userHeaders['x-user-company-id'] = authenticatedUser.companyId;
+        }
 
-    fetch('/api/auth/logs')
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) setActivityLogs(data);
-      })
-      .catch(console.error);
+        const usersRes = await fetch('/api/auth/users', { headers: userHeaders });
+        if (usersRes.ok) {
+          const data = await usersRes.json();
+          if (isMounted && Array.isArray(data) && data.length > 0) {
+            setUsers(data);
+          }
+        }
 
-    fetch('/api/notifications')
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) setNotifications(data);
-      })
-      .catch(console.error);
+        const vehiclesRes = await fetch('/api/vehicles');
+        if (vehiclesRes.ok) {
+          const data = await vehiclesRes.json();
+          if (isMounted && Array.isArray(data)) setVehicles(data);
+        }
 
-    fetch('/api/settings')
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.appName) setAppSettings(data);
-      })
-      .catch(console.error);
+        const logsRes = await fetch('/api/auth/logs');
+        if (logsRes.ok) {
+          const data = await logsRes.json();
+          if (isMounted && Array.isArray(data)) setActivityLogs(data);
+        }
 
-    fetch('/api/permissions')
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data) && data.length > 0) setRolePermissions(data.map((r: any) => ({ role: r.role, modules: r.modules })));
-      })
-      .catch(console.error);
-  }, [isLoggedIn]);
+        const notifRes = await fetch('/api/notifications');
+        if (notifRes.ok) {
+          const data = await notifRes.json();
+          if (isMounted && Array.isArray(data)) setNotifications(data);
+        }
+
+        const settingsRes = await fetch('/api/settings');
+        if (settingsRes.ok) {
+          const data = await settingsRes.json();
+          if (isMounted && data && data.appName) setAppSettings(data);
+        }
+
+        const permRes = await fetch('/api/permissions');
+        if (permRes.ok) {
+          const data = await permRes.json();
+          if (isMounted && Array.isArray(data) && data.length > 0) {
+            setRolePermissions(data.map((r: any) => ({ role: r.role, modules: r.modules })));
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching Firestore synchronized data:', err);
+      }
+    };
+
+    fetchAllData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isLoggedIn, authenticatedUser?.role, authenticatedUser?.companyId]);
 
   // Persist State Changes
   useEffect(() => {
@@ -815,7 +834,10 @@ export default function App() {
                   try {
                     const res = await fetch('/api/auth/users', {
                       method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'x-user-role': authenticatedUser.role || '',
+                      },
                       body: JSON.stringify(nu),
                     });
                     const data = await res.json();
@@ -844,20 +866,31 @@ export default function App() {
                 }}
                 onDeleteUser={async (id) => {
                   const targetUser = users.find(u => u.id === id);
-                  setUsers((prev) => prev.filter(u => u.id !== id));
-                  if (targetUser) {
-                    logAdminAction('Delete User Record', 'User Management', `Deleted user ${targetUser.name} (${targetUser.id}).`);
-                  }
                   try {
-                    await fetch(`/api/auth/users/${id}`, { method: 'DELETE' });
+                    const res = await fetch(`/api/auth/users/${id}`, { method: 'DELETE' });
+                    if (!res.ok) {
+                      const data = await res.json().catch(() => ({}));
+                      triggerToast('Delete Failed', data.error || 'Failed to delete user from the database.', 'error');
+                      return false;
+                    }
+                    // Only remove from local state once the backend confirms
+                    // the record was actually deleted.
+                    setUsers((prev) => prev.filter(u => u.id !== id));
+                    if (targetUser) {
+                      logAdminAction('Delete User Record', 'User Management', `Deleted user ${targetUser.name} (${targetUser.id}).`);
+                    }
+                    return true;
                   } catch (err) {
                     console.error('Failed to sync user deletion to backend', err);
+                    triggerToast('Delete Failed', 'Could not reach the server to delete this user. Please check your connection and try again.', 'error');
+                    return false;
                   }
                 }}
                 themeColor={themeColor}
                 triggerToast={triggerToast}
                 triggerConfirm={triggerConfirm}
                 isAdmin={authenticatedUser.role === 'Admin Owner' || authenticatedUser.role === 'Super Admin' || authenticatedUser.role === 'Admin'}
+                currentUserRole={authenticatedUser.role}
               />
             )}
             {currentView === 'Company Management' && (
@@ -1014,14 +1047,24 @@ export default function App() {
                 }}
                 onDeleteUser={async (id) => {
                   const targetUser = users.find(u => u.id === id);
-                  setUsers((prev) => prev.filter(u => u.id !== id));
-                  if (targetUser) {
-                    logAdminAction('Delete Mobile User Record', 'User Management', `Deleted mobile user ${targetUser.name} (${targetUser.id}).`);
-                  }
                   try {
-                    await fetch(`/api/auth/users/${id}`, { method: 'DELETE' });
+                    const res = await fetch(`/api/auth/users/${id}`, { method: 'DELETE' });
+                    if (!res.ok) {
+                      const data = await res.json().catch(() => ({}));
+                      triggerToast('Delete Failed', data.error || 'Failed to delete user from the database.', 'error');
+                      return false;
+                    }
+                    // Only remove from local state once the backend confirms
+                    // the record was actually deleted.
+                    setUsers((prev) => prev.filter(u => u.id !== id));
+                    if (targetUser) {
+                      logAdminAction('Delete Mobile User Record', 'User Management', `Deleted mobile user ${targetUser.name} (${targetUser.id}).`);
+                    }
+                    return true;
                   } catch (err) {
                     console.error('Failed to sync mobile user deletion to backend', err);
+                    triggerToast('Delete Failed', 'Could not reach the server to delete this user. Please check your connection and try again.', 'error');
+                    return false;
                   }
                 }}
                 themeColor={themeColor}

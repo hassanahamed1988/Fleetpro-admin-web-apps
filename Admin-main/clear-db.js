@@ -1,6 +1,7 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import 'dotenv/config';
+import fs from 'fs';
 
 async function clearUsers() {
   try {
@@ -33,7 +34,24 @@ async function clearUsers() {
       });
     }
 
-    const db = getFirestore('admin');
+    // IMPORTANT: the app itself (src/db/index.ts, src/lib/firebaseAdmin.ts)
+    // reads/writes the Firestore database named in firebase-applet-config.json
+    // ("fleetpromanager"), NOT a database literally named "admin". Passing
+    // 'admin' here pointed this script at a different, unused database, so
+    // running it looked successful but never touched the real user data.
+    let databaseId = process.env.FIREBASE_DATABASE_ID;
+    if (!databaseId) {
+      try {
+        const raw = fs.readFileSync(new URL('./firebase-applet-config.json', import.meta.url));
+        const cfg = JSON.parse(raw);
+        databaseId = cfg.firestoreDatabaseId || cfg.databaseId || 'fleetpromanager';
+      } catch (e) {
+        databaseId = 'fleetpromanager';
+      }
+    }
+    console.log(`Using Firestore database: "${databaseId}"`);
+
+    const db = getFirestore(databaseId);
     const usersSnapshot = await db.collection('users').get();
     
     for (const doc of usersSnapshot.docs) {

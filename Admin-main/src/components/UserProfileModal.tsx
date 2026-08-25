@@ -505,7 +505,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-zinc-400 dark:text-zinc-400 font-medium truncate max-w-xs sm:max-w-md">
-                {user.email} • ID: <span className="font-mono text-zinc-600 dark:text-zinc-300 font-semibold">{toDigits(user.id)}</span>
+                {user.email} • ID: <span className="font-mono text-zinc-600 dark:text-zinc-300 font-semibold">{user.generatedUserId || user.employeeId || toDigits(user.id)}</span>
               </p>
             </div>
           </div>
@@ -819,7 +819,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   <div className="app-form-grid">
                     <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/20 border border-zinc-200/30 dark:border-zinc-800/40">
                       <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider block mb-1">{t('User ID')}</span>
-                      <span className="text-xs font-bold text-zinc-800 dark:text-zinc-100 font-mono block truncate">{toDigits(user.id)}</span>
+                      <span className="text-xs font-bold text-zinc-800 dark:text-zinc-100 font-mono block truncate">{user.generatedUserId || user.employeeId || toDigits(user.id)}</span>
                     </div>
 
                     <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/20 border border-zinc-200/30 dark:border-zinc-800/40">

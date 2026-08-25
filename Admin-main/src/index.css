@@ -71,11 +71,63 @@
 
   /* Global fluid dialogs and cards to prevent overflow and empty side gaps */
   .app-fluid-modal {
-    width: 98vw !important;
-    max-width: 98% !important;
+    width: min(96vw, var(--modal-max-width, 1080px)) !important;
+    max-width: 96vw !important;
     margin-left: auto !important;
     margin-right: auto !important;
   }
+
+  /* Content-Based Width and Responsive Fit Utilities */
+  .content-fit-table {
+    width: 100% !important;
+    min-width: max-content;
+  }
+
+  .content-fit-cell {
+    white-space: nowrap;
+    width: 1%;
+  }
+
+  .content-fit-expand {
+    width: auto;
+    white-space: normal;
+    word-break: break-word;
+  }
+}
+
+/* =========================================================
+   GLOBAL CONTENT-FIT & RESPONSIVE LAYOUT ENGINE
+   - Adaptive Table & Container width scaling based on largest content
+   - Zero unnecessary excessive blank padding
+   - Controlled responsive horizontal scrolling & auto-fit
+   ========================================================= */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+/* Auto-size cells based on content while allowing primary text columns to naturally breathe */
+th, td {
+  vertical-align: middle;
+}
+
+/* Ensure long text / emails / IDs wrap gracefully when needed without breaking layout */
+.truncate-safe {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.break-word-safe {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
 }
 
 /* Base Component & Structural Card Overrides for Global Elevation */

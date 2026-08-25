@@ -64,6 +64,8 @@ export interface User {
   adminOwnerId?: string;
   createdBy?: string;
   accountType?: 'MOBILE_APP' | 'ADMIN_PANEL';
+  employeeId?: string;
+  generatedUserId?: string;
   [key: string]: any;
 }
 

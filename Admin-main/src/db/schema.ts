@@ -45,6 +45,8 @@ export const users = pgTable('users', {
   adminOwnerId: text('admin_owner_id'),
   createdBy: text('created_by'),
   accountType: text('account_type').default('MOBILE_APP'),
+  employeeId: text('employee_id'),
+  generatedUserId: text('generated_user_id'),
 
   // Company Owner & Tenant Mapping Extensions
   companyId: text('company_id'),

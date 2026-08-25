@@ -21,10 +21,11 @@ interface UserManagementViewProps {
   users: User[];
   onAddUser: (user: User) => void;
   onUpdateUser: (user: User) => void;
-  onDeleteUser: (userId: string) => void;
+  onDeleteUser: (userId: string) => Promise<boolean>;
   themeColor: 'blue' | 'emerald' | 'red' | 'amber' | 'purple';
   triggerToast: (title: string, message: string, type: 'success' | 'warning' | 'error' | 'info') => void;
   triggerConfirm: (title: string, message: string, onConfirm: () => void) => void;
+  currentUserRole?: string;
 }
 
 export const getCountryFlag = (value: string): string => {
@@ -58,6 +59,31 @@ export const getCountryFlag = (value: string): string => {
   return '';
 };
 
+// Generates a unique 6-8 digit numeric ID for an Admin Owner / Super Admin /
+// Admin account. This ID is later stamped onto every mobile app user account
+// that admin creates (see MobileApp.tsx / server.ts), purely so the system
+// can record which admin created which mobile user. It is unrelated to,
+// and does not change, the mobile user's own UserId format.
+const generateAdminUniqueId = (existingUsers: User[], excludeUserId?: string): string => {
+  const existingIds = new Set<string>();
+  (existingUsers || []).forEach(u => {
+    if (excludeUserId && u.id === excludeUserId) return;
+    if (u.adminOwnerId) existingIds.add(String(u.adminOwnerId).trim());
+  });
+
+  let generated = '';
+  let attempts = 0;
+  do {
+    const digitLength = 6 + Math.floor(Math.random() * 3); // 6, 7, or 8
+    const min = Math.pow(10, digitLength - 1);
+    const max = Math.pow(10, digitLength) - 1;
+    generated = String(Math.floor(min + Math.random() * (max - min + 1)));
+    attempts++;
+  } while (existingIds.has(generated) && attempts < 10000);
+
+  return generated;
+};
+
 export const UserManagementView: React.FC<UserManagementViewProps> = ({
   users,
   onAddUser,
@@ -66,6 +92,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   themeColor,
   triggerToast,
   triggerConfirm,
+  currentUserRole,
 }) => {
   const { language, t, formatNumber, formatDate, toDigits } = useLanguage();
   // Search & Filter State
@@ -392,9 +419,11 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     // Extract mobile app custom profile fields
     const standardKeys = [
       'id', 'name', 'email', 'phone', 'role', 'status', 'department', 'joinDate', 
-      'lastLogin', 'passwordHash', 'permissions', 'dbSource', 'avatarUrl', 
-      'mustChangeCredentials', 'is2faEnabled', 'is2faSetupRequired', 
-      'totpSecretEncrypted', 'trustedDeviceTokens', 'username', 'features', 'allowedFeatures'
+      'lastLogin', 'passwordHash', 'permissions', 'dbSource', 'avatar', 'avatarUrl', 
+      'mustChangeCredentials', 'forcePasswordReset', 'is2faEnabled', 'is2faSetupRequired', 
+      'totpSecretEncrypted', 'trustedDeviceTokens', 'username', 'features', 'allowedFeatures',
+      'generatedUserId', 'employeeId', 'adminOwnerId', 'createdBy', 'loginEmail', 'mobileNumber',
+      'mobileModulePermissions', 'companyId'
     ];
     const custom = Object.entries(user)
       .filter(([key, val]) => !standardKeys.includes(key) && (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean'))
@@ -480,6 +509,16 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       );
       return;
     }
+
+    // SECURITY: Only Admin Owner can assign Super Admin or Admin role
+    if (['Super Admin', 'Admin'].includes(formRole) && currentUserRole !== 'Admin Owner') {
+      triggerToast(
+        t('Access Denied'),
+        t('Only Admin Owner can assign Super Admin or Admin roles.'),
+        'error'
+      );
+      return;
+    }
     
     setIsProcessing(true);
     await new Promise(r => setTimeout(r, 600));
@@ -520,18 +559,27 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
         accountType: formAccountType,
         documentIssueDate: formDocumentIssueDate,
         documentExpiryDate: formDocumentExpiryDate,
+        generatedUserId: selectedUser.generatedUserId,
+        employeeId: selectedUser.employeeId || selectedUser.generatedUserId,
+        adminOwnerId: selectedUser.adminOwnerId,
+        createdBy: selectedUser.createdBy,
+        loginEmail: selectedUser.loginEmail || formEmail,
+        mobileNumber: selectedUser.mobileNumber || formPhone,
+        mobileModulePermissions: selectedUser.mobileModulePermissions,
+        companyId: selectedUser.companyId,
         ...(formPassword ? { password: formPassword } : {}),
       };
 
       // Clean up previous non-standard keys so deleted ones are cleared
       const standardKeys = [
         'id', 'name', 'email', 'phone', 'role', 'status', 'department', 'joinDate', 
-        'lastLogin', 'passwordHash', 'permissions', 'dbSource', 'avatarUrl', 
-        'mustChangeCredentials', 'is2faEnabled', 'is2faSetupRequired', 
+        'lastLogin', 'passwordHash', 'permissions', 'dbSource', 'avatar', 'avatarUrl', 
+        'mustChangeCredentials', 'forcePasswordReset', 'is2faEnabled', 'is2faSetupRequired', 
         'totpSecretEncrypted', 'trustedDeviceTokens', 'username', 'features', 'allowedFeatures',
         'nationality', 'country', 'mobileCode', 'documentsType', 'documentNumber', 'gender', 'religion', 'relationship',
         'profession', 'buildingNumber', 'zoneNumber', 'stateNumber', 'areaName', 'city', 'region',
-        'policeStation', 'postOfficeName', 'postalCode', 'dateOfBirth', 'accountType', 'documentIssueDate', 'documentExpiryDate'
+        'policeStation', 'postOfficeName', 'postalCode', 'dateOfBirth', 'accountType', 'documentIssueDate', 'documentExpiryDate',
+        'generatedUserId', 'employeeId', 'adminOwnerId', 'createdBy', 'loginEmail', 'mobileNumber', 'mobileModulePermissions', 'companyId'
       ];
       Object.keys(updatedUser).forEach(key => {
         if (!standardKeys.includes(key)) {
@@ -571,12 +619,31 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       );
       return;
     }
+
+    // SECURITY: Only Admin Owner can create Super Admin or Admin accounts
+    if (['Super Admin', 'Admin'].includes(formRole) && currentUserRole !== 'Admin Owner') {
+      triggerToast(
+        t('Access Denied'),
+        t('Only Admin Owner can create Super Admin or Admin accounts.'),
+        'error'
+      );
+      return;
+    }
     
     setIsProcessing(true);
     await new Promise(r => setTimeout(r, 600));
     
+    const ADMIN_ROLES_WITH_OWN_ID: UserRole[] = ['Admin Owner', 'Super Admin', 'Admin'];
     const newUser: User = {
       id: `USR-${Math.floor(100 + Math.random() * 900)}`,
+      // Admin Owner / Super Admin / Admin accounts each get their own unique
+      // 6-8 digit ID. This gets stamped onto every mobile app user account
+      // this admin later creates, purely so the system can record which
+      // admin created which mobile user. Mobile users' own ID format is
+      // untouched by this.
+      adminOwnerId: ADMIN_ROLES_WITH_OWN_ID.includes(formRole)
+        ? generateAdminUniqueId(users)
+        : undefined,
       name: formName,
       email: formEmail,
       username: formUsername || formEmail,
@@ -642,13 +709,19 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     triggerConfirm(
       t('Delete User?'),
       t('This action cannot be undone. Are you sure you want to delete {name}?', { name: user.name }),
-      () => {
-        onDeleteUser(user.id);
-        triggerToast(
-          t('✓ User Deleted'),
-          t('The user account was successfully deleted.'),
-          'success'
-        );
+      async () => {
+        // Wait for confirmation that the backend actually deleted the
+        // record before telling the admin it succeeded. If the delete
+        // failed, onDeleteUser already surfaced an error toast, so we
+        // simply skip the success toast here.
+        const deleted = await onDeleteUser(user.id);
+        if (deleted) {
+          triggerToast(
+            t('✓ User Deleted'),
+            t('The user account was successfully deleted.'),
+            'success'
+          );
+        }
       }
     );
   };
@@ -1494,7 +1567,11 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                       value={formRole}
                       onChange={(val) => setFormRole(val as UserRole)}
                       category="Role"
-                      fallbackOptions={['Admin Owner', 'Super Admin', 'Admin', 'Manager', 'Accountant', 'Accounting Manager', 'Assistant', 'Officer', 'Supervisor', 'Operator', 'Users']}
+                      fallbackOptions={
+                        currentUserRole === 'Admin Owner'
+                          ? ['Admin Owner', 'Super Admin', 'Admin', 'Manager', 'Accountant', 'Accounting Manager', 'Assistant', 'Officer', 'Supervisor', 'Operator', 'Users']
+                          : ['Manager', 'Accountant', 'Accounting Manager', 'Assistant', 'Officer', 'Supervisor', 'Operator', 'Users']
+                      }
                       icon={<Shield className="w-4 h-4 text-zinc-400 dark:text-zinc-500" />}
                     />
 

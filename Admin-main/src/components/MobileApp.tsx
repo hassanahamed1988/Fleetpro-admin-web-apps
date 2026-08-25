@@ -99,7 +99,7 @@ interface MobileTripsViewProps {
   currentUser?: User;
   onAddUser: (user: User) => void;
   onUpdateUser: (user: User) => void;
-  onDeleteUser: (userId: string) => void;
+  onDeleteUser: (userId: string) => Promise<boolean>;
   themeColor: 'blue' | 'emerald' | 'red' | 'amber' | 'purple';
   triggerToast: (title: string, message: string, type: 'success' | 'warning' | 'error' | 'info') => void;
   triggerConfirm: (title: string, message: string, onConfirm: () => void) => void;
@@ -119,7 +119,9 @@ export function MobileTripsView({
 
   // Determine Active Admin Owner & Unique Admin Owner ID
   const activeAdminOwner = currentUser || users.find(u => u.role === 'Admin Owner' || u.role === 'Admin' || u.role === 'Super Admin') || users[0];
-  const currentAdminOwnerId = activeAdminOwner?.adminOwnerId || (activeAdminOwner?.role === 'Admin Owner' ? 'AO-000' : (activeAdminOwner?.id || 'AO-000'));
+  // Falls back to the admin's own record id only if their unique
+  // 6-8 digit adminOwnerId hasn't been assigned yet (e.g. legacy/seed data).
+  const currentAdminOwnerId = activeAdminOwner?.adminOwnerId || activeAdminOwner?.id || 'AO-000';
 
   // Search & Filter State
   const [search, setSearch] = useState('');
@@ -189,8 +191,32 @@ export function MobileTripsView({
   const [formStatus, setFormStatus] = useState<UserStatus | ''>('');
   const [formDepartment, setFormDepartment] = useState('Mobile App Users');
   const [formEmployeeId, setFormEmployeeId] = useState('');
+  const [formGeneratedUserId, setFormGeneratedUserId] = useState('');
   const [formCompanyId, setFormCompanyId] = useState('');
   const [formPassword, setFormPassword] = useState('');
+
+  const isValid7DigitUserId = (val?: string) => {
+    return typeof val === 'string' && /^UserId\d{7}$/.test(val.trim());
+  };
+
+  const generateNumericUserId = (excludeUserId?: string) => {
+    const existingIds = new Set<string>();
+    (users || []).forEach(u => {
+      if (excludeUserId && u.id === excludeUserId) return;
+      if (u.generatedUserId) existingIds.add(u.generatedUserId.trim());
+      if (u.employeeId) existingIds.add(u.employeeId.trim());
+    });
+
+    let generated = '';
+    let attempts = 0;
+    do {
+      const random7Digits = Math.floor(1000000 + Math.random() * 9000000);
+      generated = `UserId${random7Digits}`;
+      attempts++;
+    } while (existingIds.has(generated) && attempts < 10000);
+
+    return generated;
+  };
 
   // 5. Module Permissions Access State (15 Dashboard Modules)
   const [formMobileModulePermissions, setFormMobileModulePermissions] = useState<Record<string, boolean>>(
@@ -271,7 +297,9 @@ export function MobileTripsView({
     setFormStatus('Active');
     setFormDepartment('Mobile App Users');
     setFormCompanyId(`CMP-MOBILE-${Math.floor(100 + Math.random() * 900)}`);
-    setFormEmployeeId(`EMP-M-${Math.floor(1000 + Math.random() * 9000)}`);
+    const newNumericId = generateNumericUserId();
+    setFormGeneratedUserId(newNumericId);
+    setFormEmployeeId(newNumericId);
     setFormPassword('');
     setCurrentStep(1);
     setDirection(0);
@@ -317,7 +345,18 @@ export function MobileTripsView({
     setFormStatus(user.status || 'Pending');
     setFormDepartment(user.department || 'Mobile App Users');
     setFormCompanyId(user.companyId || 'CMP-MOBILE-101');
-    setFormEmployeeId(user.employeeId || '');
+    // Existing user ID migration to new 7-digit numeric UserIdXXXXXXX format:
+    let migratedUserId = '';
+    if (isValid7DigitUserId(user.generatedUserId)) {
+      migratedUserId = user.generatedUserId!.trim();
+    } else if (isValid7DigitUserId(user.employeeId)) {
+      migratedUserId = user.employeeId!.trim();
+    } else {
+      // Auto-generate new unique 7-digit numeric User ID format for existing user
+      migratedUserId = generateNumericUserId(user.id);
+    }
+    setFormGeneratedUserId(migratedUserId);
+    setFormEmployeeId(migratedUserId);
     setFormPassword('');
     setCurrentStep(1);
     setDirection(0);
@@ -402,7 +441,11 @@ export function MobileTripsView({
           accountType: 'MOBILE_APP',
           status: formStatus || 'Active',
           department: formDepartment,
-          employeeId: formEmployeeId,
+          // Mobile App accounts created from the Admin Panel do not get an
+          // employeeId — only the Auto-Generated User ID (generatedUserId).
+          // employeeId is reserved for Company Account section roles
+          // (Admin Owner / Super Admin / Admin / Manager / Operator).
+          generatedUserId: formGeneratedUserId || formEmployeeId,
           companyId: formCompanyId,
           username: formEmail.trim().toLowerCase(),
           loginEmail: formEmail.trim().toLowerCase(),
@@ -431,6 +474,7 @@ export function MobileTripsView({
           name: fullName,
           firstName: formFirstName,
           lastName: formLastName,
+          avatar: selectedUser.avatar, // Ensure existing Profile Photo is strictly unchanged
           dateOfBirth: formDateOfBirth,
           nationality: formNationality,
           gender: formGender,
@@ -464,16 +508,21 @@ export function MobileTripsView({
           stateNumber: formStateNumber,
           areaName: formAreaName,
 
-          status: formStatus || 'Active',
-          department: formDepartment,
-          employeeId: formEmployeeId,
-          companyId: formCompanyId,
+          status: formStatus || selectedUser.status || 'Active',
+          department: formDepartment || selectedUser.department || 'Mobile App Users',
+          // Mobile App accounts don't get an employeeId — only the
+          // Auto-Generated User ID (generatedUserId). employeeId is reserved
+          // for Company Account section roles (Admin Owner / Super Admin /
+          // Admin / Manager / Operator).
+          employeeId: undefined,
+          generatedUserId: formGeneratedUserId || formEmployeeId,
+          companyId: formCompanyId || selectedUser.companyId,
           mobileModulePermissions: { ...formMobileModulePermissions },
           mustChangeCredentials: formForcePasswordReset,
           forcePasswordReset: formForcePasswordReset,
         };
         onUpdateUser(updatedUser);
-        triggerToast(t('Success'), t('Mobile App User module permissions updated successfully!'), 'success');
+        triggerToast(t('Success'), t('Mobile App User profile, credentials and User ID updated successfully!'), 'success');
         setIsEditModalOpen(false);
       }
       setIsProcessing(false);
@@ -498,9 +547,13 @@ export function MobileTripsView({
     triggerConfirm(
       t('Delete Mobile User'),
       `Are you sure you want to delete ${user.name}? This action cannot be undone.`,
-      () => {
-        onDeleteUser(user.id);
-        triggerToast(t('User Deleted'), `${user.name} has been removed.`, 'warning');
+      async () => {
+        // Only confirm removal once the backend actually deletes the
+        // record. If it fails, onDeleteUser already shows an error toast.
+        const deleted = await onDeleteUser(user.id);
+        if (deleted) {
+          triggerToast(t('User Deleted'), `${user.name} has been removed.`, 'warning');
+        }
       }
     );
   };
@@ -637,12 +690,20 @@ export function MobileTripsView({
                     <tr key={u.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-all">
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-sm">
-                            {u.name.charAt(0).toUpperCase()}
-                          </div>
+                          {u.avatar ? (
+                            <img src={u.avatar} alt={u.name} className="w-9 h-9 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" referrerPolicy="no-referrer" />
+                          ) : (
+                            <div className="w-9 h-9 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-sm">
+                              {u.name.charAt(0).toUpperCase()}
+                            </div>
+                          )}
                           <div>
                             <div className="font-semibold text-zinc-900 dark:text-zinc-100">{u.name}</div>
-                            <div className="text-[11px] text-zinc-400">{u.companyId || 'CMP-MOBILE-101'}</div>
+                            <div className="text-[11px] text-zinc-400 flex items-center gap-1 mt-0.5">
+                              <span>{u.companyId || 'CMP-MOBILE-101'}</span>
+                              <span>•</span>
+                              <span className="font-mono text-indigo-600 dark:text-indigo-400 font-semibold">{u.generatedUserId || u.employeeId || 'UserId2627378'}</span>
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -921,7 +982,7 @@ export function MobileTripsView({
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 shadow-2xl p-6"
+              className="w-full app-fluid-modal max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 shadow-2xl p-6"
             >
               <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800 mb-6">
                 <div>
@@ -952,7 +1013,7 @@ export function MobileTripsView({
                     { id: 2, label: t('Identity Documentation'), icon: <Shield className="w-4 h-4" /> },
                     { id: 3, label: t('Address Coordinates'), icon: <MapPin className="w-4 h-4" /> },
                     { id: 4, label: t('Module Permissions Access'), icon: <Sliders className="w-4 h-4" /> },
-                    { id: 5, label: t('Account Control'), icon: <Lock className="w-4 h-4" /> },
+                    { id: 5, label: t('Security & Password'), icon: <Lock className="w-4 h-4" /> },
                   ].map((step) => {
                     const isActive = currentStep === step.id;
                     return (
@@ -1105,11 +1166,7 @@ export function MobileTripsView({
                             label="Email Address *"
                             type="email"
                             value={formEmail}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setFormEmail(val);
-                              setFormEmployeeId(val);
-                            }}
+                            onChange={(e) => setFormEmail(e.target.value)}
                             icon={<Mail className="w-4 h-4 text-zinc-400" />}
                           />
                         </div>
@@ -1415,33 +1472,47 @@ export function MobileTripsView({
                   >
                     <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 pb-1 border-b border-zinc-100 dark:border-zinc-800">
                       <Lock className="w-4 h-4" />
-                      <span>5. Account Control</span>
+                      <span>5. {t('Security & Password')}</span>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FloatingInput
-                        label="User ID"
-                        value={formEmployeeId}
-                        onChange={(e) => setFormEmployeeId(e.target.value)}
-                        icon={<UserIcon className="w-4 h-4 text-zinc-400" />}
-                        disabled={isEditModalOpen}
+                        label={t('User ID (Email Address)')}
+                        value={formEmail}
+                        onChange={(e) => setFormEmail(e.target.value)}
+                        icon={<Mail className="w-4 h-4 text-zinc-400" />}
+                        disabled={true}
                       />
                       <FloatingInput
-                        label={isEditModalOpen ? "New Password (Leave blank to keep current)" : "Set Access Password"}
+                        label={t('Auto-Generated User ID')}
+                        value={formGeneratedUserId}
+                        onChange={(e) => setFormGeneratedUserId(e.target.value)}
+                        icon={<UserIcon className="w-4 h-4 text-zinc-400" />}
+                        disabled={true}
+                      />
+                      <FloatingInput
+                        label={t('Registered Mobile Number')}
+                        value={formCountryCode ? `${formCountryCode} ${formPhone}`.trim() : formPhone}
+                        onChange={(e) => setFormPhone(e.target.value)}
+                        icon={<Phone className="w-4 h-4 text-zinc-400" />}
+                        disabled={true}
+                      />
+                      <FloatingInput
+                        label={isEditModalOpen ? t("New Password (Leave blank to keep current)") : t("Set Access Password")}
                         type="password"
                         value={formPassword}
                         onChange={(e) => setFormPassword(e.target.value)}
                         icon={<Lock className="w-4 h-4 text-zinc-400" />}
                       />
                       <FloatingSelect
-                        label="Account Status"
+                        label={t('Account Status')}
                         value={formStatus}
                         onChange={(e) => setFormStatus(e.target.value as UserStatus)}
                         icon={<Shield className="w-4 h-4 text-zinc-400" />}
                       >
-                        <option value="Active">Active</option>
-                        <option value="Inactive">Inactive</option>
-                        <option value="Pending">Pending</option>
-                        <option value="Blocked">Blocked</option>
+                        <option value="Active">{t('Active')}</option>
+                        <option value="Inactive">{t('Inactive')}</option>
+                        <option value="Pending">{t('Pending')}</option>
+                        <option value="Blocked">{t('Blocked')}</option>
                       </FloatingSelect>
 
                       <div className="flex items-center gap-3 p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/10">
@@ -1453,7 +1524,7 @@ export function MobileTripsView({
                           className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                         />
                         <label htmlFor="forcePasswordReset" className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">
-                          Force Password Reset on Next Login
+                          {t('Force Password Reset on Next Login')}
                         </label>
                       </div>
                     </div>
@@ -1565,7 +1636,7 @@ export function MobileTripsView({
                   <div className="text-xl font-extrabold mt-1 text-white">৳ 12,450.00</div>
                   <div className="text-[10px] text-indigo-200 mt-1 flex justify-between">
                     <span>Tenant: {previewUser.companyId || 'CMP-MOBILE-101'}</span>
-                    <span>Emp ID: {previewUser.employeeId || 'EMP-M-101'}</span>
+                    <span>User ID: {previewUser.employeeId || previewUser.generatedUserId || 'UserId2627378'}</span>
                   </div>
                 </div>
 
